@@ -20,7 +20,7 @@ const (
 	tiExecutableName = "trustedinstaller.exe"
 )
 
-func Run(path string, args []string) error {
+func Run(path string, args []string) (exec.Cmd, error) {
 	const (
 		seDebugPrivilege = "SeDebugPrivilege"
 		tiServiceName    = "TrustedInstaller"
@@ -174,6 +174,7 @@ func Run(path string, args []string) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: windows.CREATE_NEW_CONSOLE,
 		ParentProcess: syscall.Handle(hand),
+		HideWindow:    true,
 	}
 
 	err = cmd.Start()
@@ -181,5 +182,5 @@ func Run(path string, args []string) error {
 		return fmt.Errorf("cannot start new process: %v", err)
 	}
 
-	return nil
+	return cmd, nil
 }
