@@ -20,7 +20,8 @@ const (
 	tiExecutableName = "trustedinstaller.exe"
 )
 
-func Run(path string, args []string) (exec.Cmd, error) {
+func Run(path string, args []string) (*exec.Cmd, error) {
+	var cmd *exec.Cmd
 	const (
 		seDebugPrivilege = "SeDebugPrivilege"
 		tiServiceName    = "TrustedInstaller"
@@ -124,37 +125,37 @@ func Run(path string, args []string) (exec.Cmd, error) {
 
 	if !checkIfAdmin() {
 		if err := elevate(); err != nil {
-			return fmt.Errorf("cannot elevate Privs: %v", err)
+			return cmd, fmt.Errorf("cannot elevate Privs: %v", err)
 		}
 	}
 
 	if err := enableSeDebugPrivilege(); err != nil {
-		return fmt.Errorf("cannot enable %v: %v", seDebugPrivilege, err)
+		return cmd, fmt.Errorf("cannot enable %v: %v", seDebugPrivilege, err)
 	}
 
 	svcMgr, err := mgr.Connect()
 	if err != nil {
-		return fmt.Errorf("cannot connect to svc manager: %v", err)
+		return cmd, fmt.Errorf("cannot connect to svc manager: %v", err)
 	}
 
 	n, err := windows.UTF16PtrFromString(tiServiceName)
 	if err != nil {
-		return err
+		return cmd, err
 	}
 	h, err := windows.OpenService(svcMgr.Handle, n, windows.SERVICE_QUERY_STATUS|windows.SERVICE_START|windows.SERVICE_STOP|windows.SERVICE_USER_DEFINED_CONTROL)
 	if err != nil {
-		return err
+		return cmd, err
 	}
 	s := &mgr.Service{Name: tiServiceName, Handle: h}
 
 	status, err := s.Query()
 	if err != nil {
-		return fmt.Errorf("cannot query ti service: %v", err)
+		return cmd, fmt.Errorf("cannot query ti service: %v", err)
 	}
 
 	if status.State != svc.Running {
 		if err := s.Start(); err != nil {
-			return fmt.Errorf("cannot start ti service: %v", err)
+			return cmd, fmt.Errorf("cannot start ti service: %v", err)
 		} else {
 			defer s.Control(svc.Stop)
 		}
@@ -162,15 +163,15 @@ func Run(path string, args []string) (exec.Cmd, error) {
 
 	tiPid, err := getTrustedInstallerPid()
 	if err != nil {
-		return err
+		return cmd, err
 	}
 
 	hand, err := windows.OpenProcess(windows.PROCESS_CREATE_PROCESS|windows.PROCESS_DUP_HANDLE|windows.PROCESS_SET_INFORMATION, true, tiPid)
 	if err != nil {
-		return fmt.Errorf("cannot open ti process: %v", err)
+		return cmd, fmt.Errorf("cannot open ti process: %v", err)
 	}
 
-	cmd := exec.Command(path, args...)
+	cmd = exec.Command(path, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: windows.CREATE_NEW_CONSOLE,
 		ParentProcess: syscall.Handle(hand),
@@ -179,7 +180,7 @@ func Run(path string, args []string) (exec.Cmd, error) {
 
 	err = cmd.Start()
 	if err != nil {
-		return fmt.Errorf("cannot start new process: %v", err)
+		return cmd, fmt.Errorf("cannot start new process: %v", err)
 	}
 
 	return cmd, nil
